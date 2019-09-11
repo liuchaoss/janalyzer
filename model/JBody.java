@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 
-public class _JBody {
+public class JBody {
     private JClass jClass;
     // class related imports, classes within the same package, fields, methods
     private HashMap<String, String> imports;
@@ -31,7 +31,7 @@ public class _JBody {
     private final String base = "com.github.javaparser.ast.";
     private final String regexp = "(\r\n|\r|\n|\n\r|\\r\\n|\\r|\\n|\\n\\r|\\\\r\\\\n|\\\\r|\\\\n|\\\\n\\\\r)";
 
-    public _JBody(BlockStmt bs, HashMap<String, String> parameters, JClass jClass, JOutput jOutput) {
+    public JBody(BlockStmt bs, HashMap<String, String> parameters, JClass jClass, JOutput jOutput) {
         this.jdk = jOutput.getJdk();
         this.jClass = jClass;
         this.imports = jClass.getImports();
