@@ -1,16 +1,16 @@
 package model;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.Statement;
 import project.JOutput;
 
-public class JBody {
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+
+public class _JBody {
     private JClass jClass;
     // class related imports, classes within the same package, fields, methods
     private HashMap<String, String> imports;
@@ -31,14 +31,14 @@ public class JBody {
     private final String base = "com.github.javaparser.ast.";
     private final String regexp = "(\r\n|\r|\n|\n\r|\\r\\n|\\r|\\n|\\n\\r|\\\\r\\\\n|\\\\r|\\\\n|\\\\n\\\\r)";
 
-    public JBody(BlockStmt bs, HashMap<String, String> parameters, JClass jClass, JOutput jOutput) {
+    public _JBody(BlockStmt bs, HashMap<String, String> parameters, JClass jClass, JOutput jOutput) {
         this.jdk = jOutput.getJdk();
         this.jClass = jClass;
         this.imports = jClass.getImports();
         this.classes = jClass.getClasses();
         this.fields = jClass.getFields();
         this.methods = jClass.getMethods();
-        this.parameters = parameters;
+        this.parameters = parameters; // the parameters of method itself.
         this.variables = new HashMap<>();
         this.statements = new ArrayList<>();
 
@@ -79,7 +79,7 @@ public class JBody {
         for (Node node : list) {
             List<Node> childNodes = node.getChildNodes();
             String classStr = node.getClass().getTypeName();
-            if ((base + "expr.AssignExpr").equals(classStr)) {
+                if ((base + "expr.AssignExpr").equals(classStr)) {
                 access(node2list(childNodes.get(1)));
                 access(node2list(childNodes.get(0)));
                 continue;
@@ -89,19 +89,26 @@ public class JBody {
                 List<Node> nodes = childNodes.get(0).getChildNodes();
                 String name = nodes.get(0).toString();
                 if (nodes.size() == 3) {
+                    // taking int x = 1 for example
+                    //0 SimpleName: x
+                    //1 IntegerLiteralExpr: 1
+                    //2 PrimitiveType: int
                     access(node2list(nodes.get(1)));
-                }
-                String type = jClass.searchTypeForField(nodes.get(nodes.size() - 1).toString());
+                } // like int x， if the right expr is null?
+                String type = jClass.searchTypeForField(nodes.get(nodes.size() - 1).toString()); // if inner class? X.Y a = b.c;
                 this.variables.put(name, type);
                 this.statements.add("VariableDeclarationExpr," + type + "," + name);
                 continue;
-            } else if ((base + "expr.FieldAccessExpr").equals(classStr)) {
+            } else if ((base + "expr.FieldAccessExpr").equals(classStr)) { // don't need general field access expression? like person.name
                 if ((base + "expr.ThisExpr").equals(node.getChildNodes().get(0).getClass().getTypeName())) {
                     // This.field
                     String name = childNodes.get(1).toString();
                     String type = fields.get(name);
                     this.statements.add("FieldAccessExpr," + type + "," + node.toString());
-                }
+                } // add model like world.this   I don't known what it really means
+                /*else{
+                    access(node.getChildNodes());
+                }*/
                 continue;
             } else if ((base + "expr.NameExpr").equals(classStr)) {
                 // name
@@ -129,34 +136,27 @@ public class JBody {
                 this.statements.add("NameExpr," + type + "," + name);
                 continue;
             } else if ((base + "expr.MethodCallExpr").equals(classStr)) {
-                if (childNodes.size() == 2) {
-                    Node left = childNodes.get(0);
-                    Node right = childNodes.get(1);
-                    access(node2list(left));
-                    if ((base + "expr.SimpleName").equals(right.getClass().getTypeName())) {
-                        this.statements.add("MethodCallExpr," + right.toString() + "," + right.toString() + "()");
-                    } else {
-                        access(node2list(right));
-                    }
-                } else if (childNodes.size() > 2) {
-                    if ((base + "expr.SimpleName").equals(childNodes.get(0).getClass().getTypeName())) {
+                    // without packagenames, like f(a,b);
+                    if ((base + "expr.SimpleName").equals(childNodes.get(0).getClass().getTypeName())){
                         String name = childNodes.get(0).toString();
                         String type = name;
                         if (methods.containsKey(type)) {
                             type = methods.get(type);
                         }
                         this.statements.add("MethodCallExpr," + type + "," + name + "()");
-                        for (int idx = 1; idx < childNodes.size() - 1; idx++) {
+                        for (int idx = 1; idx < childNodes.size(); idx++) {
                             access(node2list(childNodes.get(idx)));
                         }
-                    } else if ((base + "expr.SimpleName").equals(childNodes.get(1).getClass().getTypeName())) {
-                        access(node2list(childNodes.get(2)));
-                        access(node2list(childNodes.get(0)));
-                        String name = childNodes.get(1).toString();
-                        this.statements.add("MethodCallExpr," + name + "," + name + "()");
-                    }
+                    } else  {
+                        // with packagenames like a.f(x,y);
+                        Node left = childNodes.get(0);
+                        Node right = childNodes.get(1);
+                        String fullPath = getFullPackagePath(left.toString());
+                        this.statements.add("MethodCallExpr," + fullPath + "," + right.toString() + "()");
+                        for (int idx = 1; idx < childNodes.size(); idx++) {
+                            access(node2list(childNodes.get(idx)));
+                        }
                 }
-                continue;
             } else if ((base + "expr.SimpleName").equals(classStr)) {
                 String name = node.toString();
                 this.statements.add("SimpleName," + name + "," + name);
@@ -324,4 +324,26 @@ public class JBody {
     public void setStatements(List<String> statements) {
         this.statements = statements;
     }
+
+    private String getFullPackagePath(String path){
+        String PathPrefixes = "";
+        String firstPrefix = path.split("\\.")[0];
+        if(this.jdk.containsKey(firstPrefix)){
+            PathPrefixes = this.jdk.get(firstPrefix);
+        }else if(this.classes.containsKey(firstPrefix)){
+            PathPrefixes = this.classes.get(firstPrefix);
+        }else if(this.imports.containsKey(firstPrefix)){
+            PathPrefixes = this.imports.get(firstPrefix);
+        }else if(this.variables.containsKey(firstPrefix)){
+            PathPrefixes = this.variables.get(firstPrefix);
+        }
+
+        String subPath = path.substring(path.indexOf(".")+1);
+        if(PathPrefixes ==""){
+            return path;
+        }
+        return PathPrefixes + "." + subPath;
+    }
 }
+
+
